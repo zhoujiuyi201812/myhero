@@ -15,20 +15,16 @@ import java.net.URL;
 public class GitHubFileController {
 
     /**
-     * 读取GitHub仓库中的文件内容
+     * 读取GitHub仓库中的文件内容，通过完整URL指定
      *
-     * @param owner 仓库所有者用户名
-     * @param repo 仓库名称
-     * @param filePath 文件路径
+     * @param githubUrl GitHub文件的完整URL
      * @param proxyHost 代理服务器地址（可选）
      * @param proxyPort 代理服务器端口（可选）
      * @return 文件内容或错误信息
      */
-    @GetMapping("/read-file")
-    public ResponseEntity<String> readFile(
-            @RequestParam String owner,
-            @RequestParam String repo,
-            @RequestParam String filePath,
+    @GetMapping("/read-file-by-url")
+    public ResponseEntity<String> readFileByUrl(
+            @RequestParam String githubUrl,
             @RequestParam(required = false) String proxyHost,
             @RequestParam(required = false) Integer proxyPort) {
 
@@ -41,7 +37,7 @@ public class GitHubFileController {
         }
 
         try {
-            String content = readGitHubFileViaAPI(owner, repo, filePath);
+            String content = readGitHubFileViaAPI(githubUrl);
             return ResponseEntity.ok(content);
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Error reading file: " + e.getMessage());
@@ -51,8 +47,19 @@ public class GitHubFileController {
     /**
      * 使用GitHub API获取最新文件内容
      */
-    private String readGitHubFileViaAPI(String owner, String repo, String filePath) throws Exception {
+    private String readGitHubFileViaAPI(String githubUrl) throws Exception {
         try {
+            // 从URL中解析出owner、repo和filePath
+            String[] parts = githubUrl.split("/");
+            if (parts.length < 7 || !parts[5].equals("blob")) {
+                throw new Exception("Invalid GitHub URL format. Expected: https://github.com/{owner}/{repo}/blob/{branch}/{path}");
+            }
+            
+            String owner = parts[3];
+            String repo = parts[4];
+            String branchAndPath = String.join("/", java.util.Arrays.copyOfRange(parts, 6, parts.length));
+            String filePath = branchAndPath.replaceFirst("^[^/]+/", ""); // 移除分支名，保留文件路径
+            
             // 获取最新commit SHA
             String commitsUrl = "https://api.github.com/repos/" + owner + "/" + repo + "/commits?path=" + filePath;
             String latestCommitSha = getLatestCommitSHA(commitsUrl);
