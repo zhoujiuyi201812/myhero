@@ -1,1 +1,96 @@
-87654u计划刚发的手动蝶阀问问惹我
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.time.Instant;
+
+public class GitHubLatestFileReader {
+
+    /**
+     * 设置全局代理并从GitHub仓库读取指定文件的最新内容，完全绕过所有缓存
+     *
+     * @param fileUrl GitHub文件的原始内容链接
+     * @param proxyHost 代理服务器主机名或IP地址
+     * @param proxyPort 代理服务器端口号
+     * @return 文件内容字符串
+     */
+    public static String readGitHubFile(String fileUrl, String proxyHost, int proxyPort) {
+        StringBuilder content = new StringBuilder();
+
+        // 设置全局代理
+        System.setProperty("http.proxyHost", proxyHost);
+        System.setProperty("http.proxyPort", String.valueOf(proxyPort));
+        System.setProperty("https.proxyHost", proxyHost); // 同时设置HTTPS代理
+        System.setProperty("https.proxyPort", String.valueOf(proxyPort));
+
+        HttpURLConnection connection = null;
+        BufferedReader reader = null;
+
+        try {
+            // 将GitHub blob URL转换为raw URL，并添加时间戳参数以强制刷新
+            String rawUrl = fileUrl.replace("https://github.com", "https://raw.githubusercontent.com")
+                                   .replace("/blob/", "/");
+            // 添加时间戳参数，确保每次都请求新内容
+            rawUrl += "?t=" + Instant.now().toEpochMilli();
+
+            URL url = new URL(rawUrl);
+            connection = (HttpURLConnection) url.openConnection();
+            // 设置请求头，模拟浏览器访问，减少被拦截的可能性
+            connection.setRequestMethod("GET");
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+            
+            // 禁用所有缓存机制
+            connection.setUseCaches(false);
+            connection.setDefaultUseCaches(false);
+            connection.addRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
+            connection.addRequestProperty("Pragma", "no-cache");
+            connection.addRequestProperty("Expires", "0");
+            // 强制验证
+            connection.addRequestProperty("If-None-Match", "");
+            connection.addRequestProperty("If-Modified-Since", "");
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    content.append(line).append("\n");
+                }
+                // 移除最后多余的换行符
+                if (content.length() > 0) {
+                    content.deleteCharAt(content.length() - 1);
+                }
+            } else {
+                throw new IOException("无法访问文件，HTTP响应码: " + responseCode);
+            }
+        } catch (IOException e) {
+            e.printStackTrace(); // 实际项目中应记录日志
+            return "Error reading file: " + e.getMessage();
+        } finally {
+            // 关闭流和连接
+            try {
+                if (reader != null) {
+                    reader.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+
+        return content.toString();
+    }
+
+    // 示例用法
+    public static void main(String[] args) {
+        String githubUrl = "https://github.com/zhoujiuyi201812/myhero/blob/main/zhoujiuyi.txt";
+        String proxyHost = "127.0.0.1"; // 替换为实际的代理地址
+        int proxyPort = 1080;           // 替换为实际的代理端口
+
+        String fileContent = readGitHubFile(githubUrl, proxyHost, proxyPort);
+        System.out.println(fileContent);
+    }
+}
